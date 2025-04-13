@@ -1,0 +1,9 @@
+/img/
+/logs/
+/sticker/
+/test/
+/*.env
+/.vscode/
+/Dockerfile
+*.txt
+!requirements.txt

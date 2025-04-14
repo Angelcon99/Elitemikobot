@@ -74,6 +74,10 @@ class BotConfig:
     )
     # 현재 작업중인 목록
     sticker_tasks = {}
+    
+    # 일일 요청 제한
+    MAX_REQUESTS_PER_DAY = 10
+    request_counter: dict[int, tuple[dt.date, int]] = defaultdict(lambda: (dt.date.today(), 0))    
 
 
 class HandlerState(Enum):
@@ -185,9 +189,13 @@ class EliteMikoBot:
         )
 
     async def _create(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.message.from_user            
+        user = update.message.from_user                            
         
         try:
+            if self._is_request_limited(user.id):
+                await update.message.reply_text("하루 요청 제한을 초과했다니에...")
+                return ConversationHandler.END
+
             command = self._parse_command(update.message.text)
             if command is None:
                 await update.message.reply_text("/create [dccon id] 형태로 입력해줘")
@@ -263,6 +271,20 @@ class EliteMikoBot:
                 data={"dccon_id": sticker_data.id, "status": "Exception"},
                 message=f"{e}"
             )
+
+
+    def _is_request_limited(self, user_id: int) -> bool:
+        today = dt.date.today()
+        last_date, count = BotConfig.request_counter[user_id]
+
+        if last_date != today:
+            BotConfig.request_counter[user_id] = (today, 1)
+            return False
+        elif count >= BotConfig.MAX_REQUESTS_PER_DAY:            
+            return True
+        else:
+            BotConfig.request_counter[user_id] = (today, count + 1)
+            return False
 
 
     def _parse_command(self, user_text: str) -> Optional[tuple[int, OptionFlag]]:        

@@ -45,3 +45,11 @@ BASE_URL=http://localhost:1135/api  # API 서버 주소
 ```
 python -m elitemikobot.elitemikobot
 ```
+
+### 🔗 API 서버
+Elitemikobot은 별도의 API 서버와 통신하여 동작합니다.<br/>
+스티커 데이터의 조회, 등록, 중복 확인 등은 모두 해당 서버를 통해 이루어지며, 봇과는 별개의 프로세스로 실행되어야 합니다.<br/>
+<br/>
+현재 FastAPI 기반의 예시 API 서버는 아래 저장소를 참고해주세요.<br/>
+👉 [Elitemikobot-FastAPI](https://github.com/Angelcon99/Elitemikobot-FastAPI)<br/>
+> API 서버는 .env에 등록한 BASE_URL 주소를 통해 연결됩니다.

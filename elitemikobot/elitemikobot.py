@@ -170,7 +170,7 @@ class EliteMikoBot:
             " - 2D 사진 인공지능 모델을 사용하기 때문에 3D 사진은 이상하게 나올 수 있습니다. \n"
             " - 스티커 등록 방법은 /help 를 통해 확인할 수 있습니다. \n\n"
             "⚠️ 저작권자의 요청이 있을 경우 스티커가 삭제될 수 있습니다.\n\n"
-            "스티커 목록 - https://t.me/+wBGeNv5pe9tlOGM1 \n"
+            "스티커 목록 - https://t.me/elitemiko_bot_stickers \n"
             "니에.."
         )   
 

@@ -229,7 +229,7 @@ class EliteMikoBot:
             
             # 작업 요청자 정보
             sticker_data.user_id = user.id
-            sticker_data.user_name = user.name
+            sticker_data.user_name = f"{user.first_name}({user.name})"            
             context.user_data['sticker_data'] = sticker_data
 
             if option_flag == OptionFlag.MERGE:

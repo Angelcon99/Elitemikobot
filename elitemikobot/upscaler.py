@@ -253,7 +253,7 @@ class Upscaler():
 
 
     # composition 방식이 깨지는 GIF인지 판단하여 independent 방식으로 처리할지 여부를 리턴
-    async def _needs_independent_rendering(self, file_path: Path, pixel_diff_threshold: float = 0.05, sample_limit: int = 5) -> bool:        
+    async def _needs_independent_rendering(self, file_path: Path, pixel_diff_threshold: float = 0.01, sample_limit: int = 5) -> bool:        
         gif = Image.open(str(file_path))
         original_frames = []
         composited_frames = []
@@ -279,7 +279,7 @@ class Upscaler():
             orig = np.array(original_frames[i])
             comp = np.array(composited_frames[i])
             diff = np.abs(orig - comp)
-            changed_pixels = np.sum(np.any(diff > 5, axis=-1))
+            changed_pixels = np.sum(np.any(diff > 3, axis=-1))            
             total_pixels = diff.shape[0] * diff.shape[1]
             ratio = changed_pixels / total_pixels
             

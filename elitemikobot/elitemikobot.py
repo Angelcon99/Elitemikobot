@@ -345,8 +345,7 @@ class EliteMikoBot:
         BotConfig.sticker_tasks[sticker_data.id] = task
         return ConversationHandler.END
     
-                  
-    # 세마포어 확인
+                      
     async def _is_request_permitted(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user: User, sticker_data: StickerData) -> bool:    
         if BotConfig.task_semaphore.locked():
             await context.bot.send_message(
@@ -368,13 +367,12 @@ class EliteMikoBot:
             )
             return False
 
-        for user_task in BotConfig.user_semaphore.values():
-            if sticker_data.id == user_task['request_id']:
-                await context.bot.send_message(
-                    chat_id=update.effective_chat.id,
-                    text=f"다른 사용자가 {sticker_data.id}번 디씨콘을 작업중이니에... 조금만 기다려줘"
-                )
-                return False
+        if sticker_data.id in BotConfig.sticker_tasks:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"{sticker_data.id}번 디씨콘은 이미 작업중이니에~ 조금만 기다려줘"
+            )
+            return False
 
         BotConfig.user_semaphore[user.id]['request_id'] = sticker_data.id
         return True

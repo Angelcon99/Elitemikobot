@@ -2,7 +2,7 @@ from collections import defaultdict
 from pathlib import Path
 import random
 import string
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import aiohttp
 from telegram import Update, Bot, InputSticker, User
 from telegram.ext import (
@@ -184,8 +184,10 @@ class EliteMikoBot:
             "디시콘 링크의 # 뒤의 숫자가 dccon id 입니다. \n"
             " ex) dccon.dcinside.com/#138771 \n\n"
             "스티커는 동시에 1개만 요청할 수 있으며, 봇이 동시에 만들 수 있는 스티커 수는 제한되어 있습니다. \n"            
-            "/cancel [dccon id] 를 통해 작업중인 스티커를 취소할 수 있습니다. \n"
-            "작업을 거절당하면 잠시후에 다시 시도해주세요. "
+            "/cancel [dccon id] 를 통해 작업중인 스티커를 취소할 수 있습니다. \n\n"
+            "등록되어 있는 스티커가 이상할 경우 -o 옵션을 통해 다시 만들 수 있습니다. \n"
+            " ex) /create -o 138771 \n\n"
+            "작업을 거절당하면 잠시 후에 다시 시도해주세요."
         )
 
     async def _create(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -206,6 +208,8 @@ class EliteMikoBot:
             
             # 이미 존재하는 스티커인지 확인
             exist_url = await self._get_sticker_url(sticker_data)
+            has_overwrite = OptionFlag.has_flag(option=OptionFlag.OVERWRITE, flag=option_flag)
+            has_existing_url = bool(exist_url)
 
             if exist_url is None:
                 await update.message.reply_text("작업 중 오류가 발생했다 니에... 오류가 계속되면 관리자에게 문의해줘")
@@ -216,12 +220,17 @@ class EliteMikoBot:
                     message="Failed to connect to DB"
                 )
                 return
-            elif exist_url:                                
+            elif has_existing_url and not has_overwrite:                                     
                 await update.message.reply_text(
                     "이미 스티커가 존재한다 니에 \n\n"
                     f"{exist_url}"
                 )
-                return  
+                return            
+            elif exist_url is False and has_overwrite :                    
+                await update.message.reply_text(
+                    "등록된 스티커가 없니에...  -o 옵션을 제거하고 다시 요청해줘"                    
+                )
+                return
 
             # 세마포어 확인
             if not await self._is_request_permitted(update, context, user, sticker_data):
@@ -299,13 +308,15 @@ class EliteMikoBot:
 
         if "-m" in parts:
             option_flag = OptionFlag.MERGE
+        elif "-o" in parts:
+            option_flag = OptionFlag.OVERWRITE
         else:
-            option_flag = OptionFlag.EMP
+            option_flag = OptionFlag(0) 
 
         return int(dccon_id), option_flag
     
 
-    async def _get_sticker_url(self, sticker_data: StickerData) -> Optional[str]:
+    async def _get_sticker_url(self, sticker_data: StickerData) -> Union[str, None, bool]:
         try:
             async with DbApiClient(BotConfig.BASE_URL, sticker_data) as db:
                 if await db.check_sticker_exists():
@@ -660,10 +671,16 @@ class EliteMikoBot:
                
 
     def _generate_group_message(self, sticker_data: StickerData) -> str:
+        message = f"{sticker_data.title}({sticker_data.id})"
+
         if OptionFlag.has_flag(sticker_data.option_flag, OptionFlag.MERGE):
-            return f"{sticker_data.title}({sticker_data.id}) -m \n{sticker_data.url}"
-        else:
-            return f"{sticker_data.title}({sticker_data.id}) \n{sticker_data.url}"
+            message += " -m"
+        elif OptionFlag.has_flag(sticker_data.option_flag, OptionFlag.OVERWRITE):
+            message += " -o"
+
+        message += f"\n{sticker_data.url}"
+
+        return message
 
 
     # 작업 취소

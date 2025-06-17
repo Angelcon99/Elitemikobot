@@ -8,7 +8,7 @@ from elitemikobot.option_flag import OptionFlag
 @dataclass
 class StickerData:                
     id: int = 0
-    option_flag: OptionFlag = OptionFlag.EMP
+    option_flag: OptionFlag = OptionFlag(0) 
     title: str = ""
     date_time: dt.datetime = dt.datetime.min
     url: str = ""

@@ -26,6 +26,12 @@ class Dccon:
                 data_dict = await self._save_dccon_data(dccon_meta, dccon_id, save_path)                      
                 
                 if data_dict["count"] == 0:
+                    self.logger.warning(
+                        action="ZeroImageCount",
+                        user="",
+                        data={"dccon_id": dccon_id},
+                        message="No images found in detail"
+                    )
                     await Deleter.delete_dccon(img_path=Path(save_path))
                     return None
 

@@ -208,9 +208,8 @@ class EliteMikoBot:
             
             # 이미 존재하는 스티커인지 확인
             exist_url = await self._get_sticker_url(sticker_data)
-            has_overwrite = OptionFlag.has_flag(option=OptionFlag.OVERWRITE, flag=option_flag)
-            has_existing_url = bool(exist_url)
-
+            has_overwrite = OptionFlag.has_flag(option=OptionFlag.OVERWRITE, flag=option_flag)            
+            
             if exist_url is None:
                 await update.message.reply_text("작업 중 오류가 발생했다 니에... 오류가 계속되면 관리자에게 문의해줘")
                 self.logger.error(
@@ -220,17 +219,18 @@ class EliteMikoBot:
                     message="Failed to connect to DB"
                 )
                 return
-            elif has_existing_url and not has_overwrite:                                     
+            elif exist_url is False:
+                if has_overwrite:
+                    await update.message.reply_text(
+                    "등록된 스티커가 없니에...  -o 옵션을 제거하고 다시 요청해줘"                    
+                )
+                return
+            elif exist_url and not has_overwrite:                                     
                 await update.message.reply_text(
                     "이미 스티커가 존재한다 니에 \n\n"
                     f"{exist_url}"
                 )
-                return            
-            elif exist_url is False and has_overwrite :                    
-                await update.message.reply_text(
-                    "등록된 스티커가 없니에...  -o 옵션을 제거하고 다시 요청해줘"                    
-                )
-                return
+                return                        
 
             # 세마포어 확인
             if not await self._is_request_permitted(update, context, user, sticker_data):
@@ -241,7 +241,7 @@ class EliteMikoBot:
             sticker_data.user_name = f"{user.first_name}({user.name})"            
             context.user_data['sticker_data'] = sticker_data
 
-            if option_flag == OptionFlag.MERGE:
+            if OptionFlag.has_flag(option_flag, OptionFlag.MERGE):
                 # -m 옵션이 있으면 추가 번호 입력을 요청
                 await update.message.reply_text("합칠 디시콘 번호를 입력해줘 (예: 1 3 5 7)")
                 return HandlerState.ASK_MERGE_NUMS
@@ -306,13 +306,13 @@ class EliteMikoBot:
         if not dccon_id.isdigit():
             return None
 
-        if "-m" in parts:
-            option_flag = OptionFlag.MERGE
-        elif "-o" in parts:
-            option_flag = OptionFlag.OVERWRITE
-        else:
-            option_flag = OptionFlag(0) 
+        option_flag = OptionFlag(0) 
 
+        if "-o" in parts:
+            option_flag = OptionFlag.set_flag(option_flag, OptionFlag.OVERWRITE)
+        if "-m" in parts:
+            option_flag = OptionFlag.set_flag(option_flag, OptionFlag.MERGE)  
+                    
         return int(dccon_id), option_flag
     
 

@@ -155,10 +155,7 @@ class Upscaler():
         combined.paste(pil_image1, (0, 0))
         combined.paste(pil_image2, (256, 0))
         
-        final = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
-        final.paste(combined, (0, 128), combined)
-
-        return np.array(final)        
+        return np.array(combined)     
 
 
     # 이미지 크기 압축
@@ -227,7 +224,7 @@ class Upscaler():
         await asyncio.gather(*tasks)        
         
         avg_durations = [(durations1[i] + durations2[i]) / 2 for i in range(max_len)]
-        await self._generate_webm(frame_path, num, avg_durations)
+        await self._generate_webm(frame_path, num, avg_durations, is_merge=True)
 
 
     # GIF 프레임 업스케일링 → 병합
@@ -244,12 +241,9 @@ class Upscaler():
             combined = Image.new("RGBA", (512, 256), (0, 0, 0, 0))
             combined.paste(Image.fromarray(np1), (0, 0))
             combined.paste(Image.fromarray(np2), (256, 0))
-
-            final = Image.new("RGBA", (512, 512), (0, 0, 0, 0))
-            final.paste(combined, (0, 128), combined)
-
+     
             out_path = frame_path / f"{frame_num:03d}.png"
-            await loop.run_in_executor(None, lambda: final.save(str(out_path)))        
+            await loop.run_in_executor(None, lambda: combined.save(str(out_path)))        
 
 
     # composition 방식이 깨지는 GIF인지 판단하여 independent 방식으로 처리할지 여부를 리턴
@@ -328,12 +322,16 @@ class Upscaler():
 
 
     # webm 생성
-    async def _generate_webm(self, frame_path: Path, num: int, frame_duration: list) -> None:                                              
+    async def _generate_webm(self, frame_path: Path, num: int, frame_duration: list, is_merge: bool = False) -> None:                                              
+        x_size, y_size = (512, 256) if is_merge else (512, 512)
+
         converter = Converter(
             dccon_id=self.dccon_id,
             num=num,
             input_folder=str(frame_path), 
             out_path=str(Path(self.sticker_path) / f"{num}.webm"),
-            frame_durations=frame_duration,                
+            frame_durations=frame_duration,           
+            x_size=x_size,
+            y_size=y_size     
         )
         await converter.convert_video()

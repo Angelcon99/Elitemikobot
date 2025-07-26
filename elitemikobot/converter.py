@@ -8,8 +8,6 @@ from elitemikobot.logger import Logger
 class Converter:
     MAX_DURATION_MS = 3000 - 1
     MAX_SIZE_KB = 256        
-    IMG_SIZE_X = 512
-    IMG_SIZE_Y = 512
     TOLERANCE_KB = 25
     MAX_ATTEMPTS = 5
     DEFAULT_FRAME_DURATION_MS = 60
@@ -17,7 +15,7 @@ class Converter:
     FORMAT = "yuva420p"
     PIX_FMT = "yuva420p"
 
-    def __init__(self,dccon_id: int, num: int, input_folder: str, out_path: str, frame_durations: list[int]):        
+    def __init__(self,dccon_id: int, num: int, input_folder: str, out_path: str, frame_durations: list[int], x_size: int = 512, y_size: int = 512):        
         self.dccon_id = dccon_id
         self.num = num
         self.logger = Logger(name="Converter_Log")
@@ -25,6 +23,8 @@ class Converter:
         self.output_path = Path(out_path)
         self.frame_durations = frame_durations        
         self.frame_info = self.input_folder / "frame_info.txt"
+        self.x_size = x_size
+        self.y_size = y_size
 
 
     # GIF → webm
@@ -127,7 +127,7 @@ class Converter:
     async def _encode_video(self, bitrate_kbps: int, total_duration: float) -> None:        
         command = (
             f'ffmpeg -f concat -safe 0 -i "{str(self.frame_info)}" '
-            f'-vf scale={self.IMG_SIZE_X}:{self.IMG_SIZE_Y},format={self.FORMAT} '
+            f'-vf scale={self.x_size}:{self.y_size},format={self.FORMAT} '
             f'-c:v libvpx-vp9 -b:v {bitrate_kbps}k -pix_fmt {self.PIX_FMT} '
             f'-an -sn -y -loglevel warning -hide_banner -stats '
             f'-t {total_duration} '

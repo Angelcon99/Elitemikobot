@@ -219,12 +219,11 @@ class EliteMikoBot:
                     message="Failed to connect to DB"
                 )
                 return
-            elif exist_url is False:
-                if has_overwrite:
-                    await update.message.reply_text(
-                    "등록된 스티커가 없니에...  -o 옵션을 제거하고 다시 요청해줘"                    
+            elif exist_url is False and has_overwrite:                
+                await update.message.reply_text(
+                    "등록된 스티커가 없니에...  -o 옵션을 제거하고 다시 요청해줘"
                 )
-                return
+                return                
             elif exist_url and not has_overwrite:                                     
                 await update.message.reply_text(
                     "이미 스티커가 존재한다 니에 \n\n"

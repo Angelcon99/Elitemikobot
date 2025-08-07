@@ -1,17 +1,17 @@
 # Elitemikobot 🌸
 
-Elitemikobot은 디시콘 번호를 입력 받으면 AI 업스케일링을 거쳐 텔레그램 스티커를 생성해주는 텔레그램 봇입니다. <br/> <br/>
+디시콘 번호를 입력하면 AI 업스케일링을 거쳐 텔레그램 스티커를 자동 생성하는 Telegram Bot <br/> <br/>
 <img src="https://github.com/user-attachments/assets/de81256f-7ba2-4f22-abe9-eb4011e1d1b1" alt="Image" width="300"/>
 <br/>
 
 ## 주요 기능
 
 - ✅ 텔레그램 봇 명령어를 통한 자동 스티커 생성
-- ✅ 디시콘 ID를 통해 디시콘 데이터 수집
+- ✅ 사용자가 요청한 디시 데이터 수집
 - ✅ Waifu2x를 이용한 이미지 업스케일링
 - ✅ FFmpeg를 이용해 GIF ➜ WebM 변환
-- ✅ DB를 통한 스티커 중복 생성 방지
-- ✅ 작업 중복 방지를 위한 사용자 단위 세마포어 처리
+- ✅ 중복 요청 방지, 사용량 제한 등 안전성 높 구조
+- ✅ FastAPI 기반 API 서버를 통해 스티커 DB 관리
 <br/>
 
 ## 🚀 프로젝트 실행 방법

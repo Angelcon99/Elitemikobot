@@ -7,13 +7,11 @@ from PIL import Image
 from aiofiles import open as aio_open
 from elitemikobot.logger import Logger
 from elitemikobot.dccon_data import DcconData
-from elitemikobot.deleter import Deleter
 
 
 class Dccon:
     def __init__(self):        
         self.logger = Logger(name="Dccon_Log")
-
 
     async def process_dccon(self, dccon_id: int, save_path: str) -> DcconData:            
         try:
@@ -22,7 +20,7 @@ class Dccon:
                 return None                    
 
             max_try = 3
-            for _ in range(1, max_try + 1):
+            for _ in range(max_try):
                 data_dict = await self._save_dccon_data(dccon_meta, dccon_id, save_path)                      
                 
                 if data_dict["count"] == 0:
@@ -31,17 +29,21 @@ class Dccon:
                         user="",
                         data={"dccon_id": dccon_id},
                         message="No images found in detail"
-                    )
-                    await Deleter.delete_dccon(img_path=Path(save_path))
+                    )                    
                     return None
 
                 is_success, err = await self._validate_dccon(save_path)
-                if is_success:                
-                    break
-                else:
-                    data_dict['err'] = err 
-                    await Deleter.delete_dccon(img_path=Path(save_path))
-                            
+                if is_success:                                                
+                    return DcconData(**data_dict)                
+            
+            
+            data_dict['err'] = err
+            self.logger.warning(
+                action="ValidateFailed",
+                user="",
+                data={"dccon_id": dccon_id},
+                message=f"{err}"
+            )            
             return DcconData(**data_dict)
             
         except ValueError as e:            
@@ -61,7 +63,6 @@ class Dccon:
                 message=f"{e}"
             ) 
             return None
-
 
     # 디시콘 메타데이터 요청
     async def _fetch_dccon(self, dccon_id: int) -> Dict[str, Any]:        
@@ -84,8 +85,7 @@ class Dccon:
                 data={"dccon_id": dccon_id, "status": "json_error"},
                 message=f"{e}"
             )
-            return None  # JSON 파싱 실패                      
-
+            return None                     
 
     # 디시콘 이미지 저장, 스티커 데이터 생성
     async def _save_dccon_data(self, metadata: Dict[str, Any], dccon_id: int, path: str) -> Dict[str, Any]:        
@@ -111,10 +111,9 @@ class Dccon:
             
             await asyncio.gather(*tasks)
             
-            await self._convert_single_frame_gif_to_png(save_dir, dccon_id, dccon_data)
+        await self._convert_single_frame_gif_to_png(save_dir, dccon_id, dccon_data)
 
         return dccon_data        
-
 
     # GIF 파일 중 프레임이 1개인 파일을 PNG로 변환
     async def _convert_single_frame_gif_to_png(self, save_dir: Path, dccon_id: int, dccon_data: Dict[str, Any]) -> None:               
@@ -131,8 +130,11 @@ class Dccon:
                         dccon_data["ext"][num] = "png"
                         
             except Exception as e:
-                raise e
-
+                self.logger.error(
+                    action="GIF conversion failed",
+                    data={"file": file_path},
+                    message=f"{e}"
+                )
 
     async def _download_dccon(self, session: aiohttp.ClientSession, url: str, save_dir: Path, num: int, ext: str) -> None:        
         headers = {"referer": "https://dccon.dcinside.com/"}
@@ -141,19 +143,25 @@ class Dccon:
         async with session.get(url, headers=headers) as response:
             if response.status == 200:
                 async with aio_open(file_path, "wb") as f:
-                    await f.write(await response.read())
-                    
+                    await f.write(await response.read())                
 
-    # 다운로드한 디시콘 이미지 유효성 검사
-    async def _validate_dccon(self, path: str) -> tuple[bool, str]:        
-        p = Path(path)
-        imgs = list(p.glob('*'))
+    # 이미지 유효성 검사
+    async def _validate_dccon(self, path: str) -> tuple[bool, str | None]:
+        img_path = Path(path)
+        imgs = list(img_path.glob('*'))
         
         if not imgs:            
             return (False, "No images downloaded")
 
-        for img in imgs:                        
-            if img.stat().st_size <= 1024:
-                return (False, "dccon download failed")
+        for img in imgs:      
+            try:                  
+                if img.stat().st_size <= 100:
+                    return (False, "dccon download failed")
+
+                with Image.open(img) as im:
+                    im.verify()
+                    
+            except Exception as e:
+                return (False, f"Invalid image file: {img.name}, err={e}")
             
         return (True, None)

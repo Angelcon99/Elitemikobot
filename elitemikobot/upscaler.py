@@ -51,9 +51,7 @@ class Upscaler():
                 
                 if is_merge:
                     # i + (i + 1) 이미지 병합 
-                    process_method = (
-                        self._process_img_with_merge if ext == "png" else self._process_gif_with_merge
-                    )
+                    process_method = self._process_img_with_merge if ext == "png" else self._process_gif_with_merge                    
                     await process_method(file_paths[0], file_paths[1], i)
                     i += 2
                 else:
@@ -96,19 +94,23 @@ class Upscaler():
     async def _waifu2x_process(self, image: np.ndarray) -> np.ndarray:        
         loop = asyncio.get_running_loop()
         
-        # 이미지에 알파채널이 있는 경우
-        if len(image.shape) == 3 and image.shape[2] == 4:                     
-            alpha_channel = image[:, :, 3]
+        has_alpha = image.shape[2] == 4
+        if has_alpha:
+            rgb = image[:, :, :3].copy()
+            alpha = image[:, :, 3].copy()
             
-            image = await loop.run_in_executor(None, self.waifu2x.process_cv2, image)                    
-            
-            # 업스케일링한 이미지 크기와 맞게 알파채널 리사이즈
-            resize_alpha_channel = await loop.run_in_executor(
-                None, cv2.resize, alpha_channel, (image.shape[1], image.shape[0]), cv2.INTER_LINEAR
+            rgb_upscaled = await loop.run_in_executor(None, self.waifu2x.process_cv2, rgb)            
+            alpha_resized = await loop.run_in_executor(
+                None,
+                cv2.resize,
+                alpha,
+                (rgb_upscaled.shape[1], rgb_upscaled.shape[0]),
+                cv2.INTER_LINEAR
             )
             
-            image = await loop.run_in_executor(None, cv2.cvtColor, image, cv2.COLOR_BGR2BGRA)
-            image[:, :, 3] = resize_alpha_channel  
+            bgra_upscaled = cv2.cvtColor(rgb_upscaled, cv2.COLOR_BGR2BGRA)
+            bgra_upscaled[:, :, 3] = alpha_resized
+            image = bgra_upscaled  
         else:            
             image = await loop.run_in_executor(None, self.waifu2x.process_cv2, image)
         
@@ -173,21 +175,35 @@ class Upscaler():
         frame_path = Path(self.sticker_path) / f"{self.dccon_id}_{num}"
         frame_path.mkdir(parents=True, exist_ok=True)
                 
-        # fallback 여부 판단 (픽셀 비교 기반)
-        if await self._needs_independent_rendering(file_path):
-            frames, durations = await self._extract_frames_independent(file_path)
-        else:
-            frames, durations = await self._extract_frames_composited(file_path)
-
-        tasks = []
-        sema = asyncio.Semaphore(4)                
-
-        for frame_num, frame in enumerate(frames):
-            tasks.append(self._process_gif_frame(frame, frame_num, frame_path, sema))
-
+        frames, durations = await self._extract_frames_preserve(file_path)
+                
+        sema = asyncio.Semaphore(4)                        
+        tasks = [self._process_gif_frame_preserve(f, i, frame_path, sema) for i, f in enumerate(frames)]
+        
         await asyncio.gather(*tasks)
         await self._generate_webm(frame_path, num, durations)
 
+    async def _extract_frames_preserve(self, file_path: Path) -> tuple[list[Image.Image], list[int]]:
+        gif = Image.open(str(file_path))
+        
+        frames, durations = [], []
+        for i in range(gif.n_frames):
+            gif.seek(i)
+            
+            duration = gif.info.get("duration", 0)
+            durations.append(duration)
+            
+            frames.append(gif.copy().convert("RGBA"))
+        return frames, durations
+    
+    async def _process_gif_frame_preserve(self, frame: Image.Image, frame_num: int, frame_path: Path, sema: asyncio.Semaphore) -> None:
+        async with sema:
+            loop = asyncio.get_running_loop()
+            
+            np_img = np.array(frame)
+            upscaled = await self._waifu2x_process(np_img)
+            out_file = frame_path / f"{frame_num:03d}.png"
+            await loop.run_in_executor(None, lambda: Image.fromarray(upscaled).save(str(out_file)))
 
     # GIF 프레임 업스케일링
     async def _process_gif_frame(self, frame: Image, frame_num: int, frame_path: Path, sema: asyncio.Semaphore) -> None:        
@@ -204,22 +220,12 @@ class Upscaler():
         frame_path = Path(self.sticker_path) / f"{self.dccon_id}_{num}"
         frame_path.mkdir(parents=True, exist_ok=True)                            
                 
-        if await self._needs_independent_rendering(file_path1):
-            frames1, durations1 = await self._extract_frames_independent(file_path1)
-        else:
-            frames1, durations1 = await self._extract_frames_composited(file_path1)
-
-        if await self._needs_independent_rendering(file_path2):
-            frames2, durations2 = await self._extract_frames_independent(file_path2)
-        else:
-            frames2, durations2 = await self._extract_frames_composited(file_path2)
+        frames1, durations1 = await self._extract_frames_preserve(file_path1)
+        frames2, durations2 = await self._extract_frames_preserve(file_path2)
             
-        max_len = min(len(frames1), len(frames2))        
-        tasks = []
-        sema = asyncio.Semaphore(1)        
-
-        for i in range(max_len):            
-            tasks.append(self._merge_and_save_frame(frames1[i], frames2[i], i, frame_path, sema))
+        max_len = min(len(frames1), len(frames2))                
+        sema = asyncio.Semaphore(1)
+        tasks = [self._merge_and_save_frame(frames1[i], frames2[i], i, frame_path, sema) for i in range(max_len)]        
 
         await asyncio.gather(*tasks)        
         
@@ -244,83 +250,7 @@ class Upscaler():
      
             out_path = frame_path / f"{frame_num:03d}.png"
             await loop.run_in_executor(None, lambda: combined.save(str(out_path)))        
-
-
-    # composition 방식이 깨지는 GIF인지 판단하여 independent 방식으로 처리할지 여부를 리턴
-    async def _needs_independent_rendering(self, file_path: Path, pixel_diff_threshold: float = 0.01, sample_limit: int = 5) -> bool:        
-        gif = Image.open(str(file_path))
-        original_frames = []
-        composited_frames = []
-
-        # 원본 독립 프레임 추출
-        for frame in ImageSequence.Iterator(gif):
-            original_frames.append(frame.convert("RGBA"))
-        check_count = min(sample_limit, len(original_frames))
-
-        # composition 방식 프레임 생성
-        gif.seek(0)
-        last_frame = gif.convert("RGBA")
-        for frame in ImageSequence.Iterator(gif):
-            new_frame = Image.new("RGBA", gif.size)
-            new_frame.paste(last_frame)
-            current = frame.convert("RGBA")
-            new_frame.paste(current, (0, 0), current)
-            composited_frames.append(new_frame.copy())
-            last_frame = new_frame
-
-        # 픽셀 단위 비교
-        for i in range(check_count):
-            orig = np.array(original_frames[i])
-            comp = np.array(composited_frames[i])
-            diff = np.abs(orig - comp)
-            changed_pixels = np.sum(np.any(diff > 3, axis=-1))            
-            total_pixels = diff.shape[0] * diff.shape[1]
-            ratio = changed_pixels / total_pixels
-            
-            if ratio > pixel_diff_threshold:
-                return True
-
-        return False
     
-
-    async def _extract_frames_independent(self, gif_path: Path) -> tuple[list[Image.Image], list[int]]:
-        gif = Image.open(str(gif_path))
-        frames = []
-        durations = []
-
-        for frame_index in range(gif.n_frames):
-            gif.seek(frame_index)
-            duration = gif.info.get("duration", 0)
-            durations.append(duration)
-            frame = gif.copy().convert("RGBA")
-            frames.append(frame)
-
-        return frames, durations
-    
-
-    async def _extract_frames_composited(self, gif_path: Path) -> tuple[list[Image.Image], list[int]]:
-        gif = Image.open(str(gif_path))        
-        last_frame = gif.convert("RGBA")
-
-        frames = []
-        durations = []
-
-        for frame in ImageSequence.Iterator(gif):
-            new_frame = Image.new("RGBA", gif.size)
-            
-            new_frame.paste(last_frame)
-            
-            current = frame.convert("RGBA")
-            new_frame.paste(current, (0, 0), current)
-
-            frames.append(new_frame.copy())
-            durations.append(frame.info.get("duration", 0))
-
-            last_frame = new_frame
-
-        return frames, durations        
-
-
     # webm 생성
     async def _generate_webm(self, frame_path: Path, num: int, frame_duration: list, is_merge: bool = False) -> None:                                              
         x_size, y_size = (512, 256) if is_merge else (512, 512)
@@ -335,3 +265,75 @@ class Upscaler():
             y_size=y_size     
         )
         await converter.convert_video()
+
+    # composition 방식이 깨지는 GIF인지 판단하여 independent 방식으로 처리할지 여부를 리턴
+    # async def _needs_independent_rendering(self, file_path: Path, pixel_diff_threshold: float = 0.01, sample_limit: int = 5) -> bool:        
+    #     gif = Image.open(str(file_path))
+    #     original_frames = []
+    #     composited_frames = []
+
+    #     # 원본 독립 프레임 추출
+    #     for frame in ImageSequence.Iterator(gif):
+    #         original_frames.append(frame.convert("RGBA"))
+    #     check_count = min(sample_limit, len(original_frames))
+
+    #     # composition 방식 프레임 생성
+    #     gif.seek(0)
+    #     last_frame = gif.convert("RGBA")
+    #     for frame in ImageSequence.Iterator(gif):
+    #         new_frame = Image.new("RGBA", gif.size)
+    #         new_frame.paste(last_frame)
+    #         current = frame.convert("RGBA")
+    #         new_frame.paste(current, (0, 0), current)
+    #         composited_frames.append(new_frame.copy())
+    #         last_frame = new_frame
+
+    #     # 픽셀 단위 비교
+    #     for i in range(check_count):
+    #         orig = np.array(original_frames[i])
+    #         comp = np.array(composited_frames[i])
+    #         diff = np.abs(orig - comp)
+    #         changed_pixels = np.sum(np.any(diff > 3, axis=-1))            
+    #         total_pixels = diff.shape[0] * diff.shape[1]
+    #         ratio = changed_pixels / total_pixels
+            
+    #         if ratio > pixel_diff_threshold:
+    #             return True
+
+    #     return False    
+
+    # async def _extract_frames_independent(self, gif_path: Path) -> tuple[list[Image.Image], list[int]]:
+    #     gif = Image.open(str(gif_path))
+    #     frames = []
+    #     durations = []
+
+    #     for frame_index in range(gif.n_frames):
+    #         gif.seek(frame_index)
+    #         duration = gif.info.get("duration", 0)
+    #         durations.append(duration)
+    #         frame = gif.copy().convert("RGBA")
+    #         frames.append(frame)
+
+    #     return frames, durations
+    
+    # async def _extract_frames_composited(self, gif_path: Path) -> tuple[list[Image.Image], list[int]]:
+    #     gif = Image.open(str(gif_path))        
+    #     last_frame = gif.convert("RGBA")
+
+    #     frames = []
+    #     durations = []
+
+    #     for frame in ImageSequence.Iterator(gif):
+    #         new_frame = Image.new("RGBA", gif.size)
+            
+    #         new_frame.paste(last_frame)
+            
+    #         current = frame.convert("RGBA")
+    #         new_frame.paste(current, (0, 0), current)
+
+    #         frames.append(new_frame.copy())
+    #         durations.append(frame.info.get("duration", 0))
+
+    #         last_frame = new_frame
+
+    #     return frames, durations            

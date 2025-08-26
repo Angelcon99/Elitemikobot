@@ -200,8 +200,9 @@ class Upscaler():
         async with sema:
             loop = asyncio.get_running_loop()
             
-            np_img = np.array(frame)
+            np_img = np.array(frame.copy())
             upscaled = await self._waifu2x_process(np_img)
+            
             out_file = frame_path / f"{frame_num:03d}.png"
             await loop.run_in_executor(None, lambda: Image.fromarray(upscaled).save(str(out_file)))
 

@@ -124,7 +124,7 @@ class Converter:
     async def _encode_video(self, bitrate_kbps: int) -> None:        
         command = (
             f'ffmpeg -f concat -safe 0 -i "{str(self.frame_info)}" '
-            f'-vf scale={self.x_size}:{self.y_size},format={self.FORMAT} '
+            f'-vf scale={self.x_size}:{self.y_size},format={self.FORMAT},fps=30 '            
             f'-c:v libvpx-vp9 -b:v {bitrate_kbps}k -pix_fmt {self.PIX_FMT} '
             f'-an -sn -y -loglevel warning -hide_banner -stats '            
             f'"{str(self.output_path)}"'

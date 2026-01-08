@@ -33,7 +33,7 @@ class Converter:
             await self._adjust_durations()
             total_duration = await self._generate_frame_info()
             bitrate_kbps = self._calculate_bitrate(self.MAX_SIZE_KB, total_duration)
-            await self._optimize_bitrate(bitrate_kbps, total_duration)
+            await self._optimize_bitrate(bitrate_kbps)
 
         except FileNotFoundError as e:
             self.logger.error(
@@ -83,10 +83,7 @@ class Converter:
 
                 duration_seconds = float(duration) / 1000  # ms -> s
                 total_duration += duration_seconds                          
-                await f.write(f"duration {duration_seconds}\n")                
-            
-            # 마지막 프레임 파일
-            await f.write(f"file '{filename}'\n")
+                await f.write(f"duration {duration_seconds}\n")                    
 
         return round(total_duration, 2)
 
@@ -96,12 +93,12 @@ class Converter:
 
     
     # 비트레이트 조정
-    async def _optimize_bitrate(self, initial_bitrate: int, total_duration: float) -> None:       
+    async def _optimize_bitrate(self, initial_bitrate: int) -> None:       
         bitrate = initial_bitrate
 
         # 비트레이트 최적화
         for _ in range(self.MAX_ATTEMPTS):
-            await self._encode_video(bitrate, total_duration)
+            await self._encode_video(bitrate)
             file_size_kb = await self._get_file_size()
             adjustment = self._adjust_bitrate(file_size_kb)
             if adjustment == 0:
@@ -111,7 +108,7 @@ class Converter:
             # 최대 시도 횟수 초과 시, 강제로 비트레이트를 줄이면서 크기 조절
             while await self._get_file_size() > self.MAX_SIZE_KB:
                 bitrate = max(bitrate - 25, 1)
-                await self._encode_video(bitrate, total_duration)
+                await self._encode_video(bitrate)
 
 
     # 비트레이트 조정값 결정
@@ -124,13 +121,12 @@ class Converter:
         return -step if diff_kb > 0 else step
 
     # FFmpeg 비디오 인코딩
-    async def _encode_video(self, bitrate_kbps: int, total_duration: float) -> None:        
+    async def _encode_video(self, bitrate_kbps: int) -> None:        
         command = (
             f'ffmpeg -f concat -safe 0 -i "{str(self.frame_info)}" '
             f'-vf scale={self.x_size}:{self.y_size},format={self.FORMAT} '
             f'-c:v libvpx-vp9 -b:v {bitrate_kbps}k -pix_fmt {self.PIX_FMT} '
-            f'-an -sn -y -loglevel warning -hide_banner -stats '
-            f'-t {total_duration} '
+            f'-an -sn -y -loglevel warning -hide_banner -stats '            
             f'"{str(self.output_path)}"'
         )
         

@@ -578,8 +578,8 @@ class EliteMikoBot:
 
         i = 1
         while i <= sticker_data.count:         
-            ext = "png" if sticker_data.ext[i] == "png" else "webm"
-            fmt = "static" if ext == "png" else "video"   
+            ext = "webm" if sticker_data.ext[i] == "gif" else "png"
+            fmt = "video" if ext == "webm" else "static"
             file_path = path / f"{i}.{ext}"
             
             sticker = InputSticker(

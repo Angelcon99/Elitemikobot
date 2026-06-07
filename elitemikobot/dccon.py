@@ -64,7 +64,7 @@ class Dccon:
             ) 
             return None
 
-    # 디시콘 메타데이터 요청
+    # 디시콘 메타데이터 수집
     async def _fetch_dccon(self, dccon_id: int) -> Dict[str, Any]:        
         url = "https://dccon.dcinside.com/index/package_detail"
         headers = {

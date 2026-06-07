@@ -51,13 +51,13 @@ class Upscaler():
                 
                 if is_merge:
                     # i + (i + 1) 이미지 병합 
-                    process_method = self._process_img_with_merge if ext == "png" else self._process_gif_with_merge                    
+                    process_method = self._process_gif_with_merge if ext == "gif" else self._process_img_with_merge                    
                     await process_method(file_paths[0], file_paths[1], i)
                     i += 2
                 else:
-                    process_method = self._process_img if ext == "png" else self._process_gif
+                    process_method = self._process_gif if ext == "gif" else self._process_img
                     await process_method(file_paths[0], i)
-                    i += 1                                  
+                    i += 1                            
                                                                                                      
             return True
         
